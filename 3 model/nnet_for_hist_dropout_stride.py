@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import time
 import scipy.misc
 from datetime import datetime
+import os
+import shutil
+
 # datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 class Config():
@@ -17,11 +20,18 @@ class Config():
 
     drop_out = 0.25
     # load_path = '/atlas/u/jiaxuan/data/MODIS_data_county_processed_compressed/'
-    load_path = "/atlas/u/jiaxuan/data/google_drive/img_output/"
+#     load_path = "/atlas/u/jiaxuan/data/google_drive/img_output/"
     # load_path = "/atlas/u/jiaxuan/data/google_drive/img_full_output/"
     # save_path = '/atlas/u/jiaxuan/data/train_results/histogram_new/test21/'
     # save_path = '/atlas/u/jiaxuan/data/train_results/histogram_new/test22_optimize/'
-    save_path = '/atlas/u/jiaxuan/data/train_results/final/monthly/'
+#     save_path = '/atlas/u/jiaxuan/data/train_results/final/monthly/'
+    load_path = '/content/ee-data/img_output/'
+    if (os.path.isdir('/content/ee-data/train_results')):
+        shutil.rmtree('/content/ee-data/train_results')
+    os.mkdir('/content/ee-data/train_results')
+    os.mkdir('/content/ee-data/train_results/final/')
+    save_path = '/content/ee-data/train_results/final/monthly/'
+    os.mkdir(save_path)
 
 
 def conv2d(input_data, out_channels, filter_size,stride, in_channels=None, name="conv2d"):
@@ -181,6 +191,7 @@ class NeuralModel():
         #                                            config.lr_decay_step, config.lr_decay_rate, staircase=False)
 
         self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
+
 
 
 

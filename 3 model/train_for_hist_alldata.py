@@ -3,7 +3,6 @@ from GP_crop_v3 import *
 import logging
 
 
-
 if __name__ == "__main__":
     predict_year = 2013
     logging.basicConfig(filename='train_for_hist_alldata'+str(predict_year)+'.log',level=logging.DEBUG)
@@ -11,7 +10,7 @@ if __name__ == "__main__":
     config = Config()
 
     # load data to memory
-    filename = 'histogram_all' + '.npz'
+    filename = 'histogram_all_mean' + '.npz'
     # filename = 'histogram_all_soilweather' + '.npz'
     content = np.load(config.load_path + filename)
     image_all = content['output_image']
@@ -284,3 +283,4 @@ if __name__ == "__main__":
         plt.title('ME')
         # plt.legend(['RMSE', 'ME'])
         plt.show()
+

@@ -7,12 +7,19 @@ import pandas as pd
 # from clean_data_county import *
 from joblib import Parallel, delayed
 import multiprocessing
+import final_clean_data as clean
+import shutil
+
 
 class fetch_data():
     def __init__(self):
         # data dir
         # self.dir = '/atlas/u/jiaxuan/data/MODIS_data/MODIS_data'
-        self.dir = "/atlas/u/jiaxuan/data/google_drive/img_output/"
+        #.  self.dir = "/atlas/u/jiaxuan/data/google_drive/img_output/"
+        self.dir='/content/ee-data/img_output/'
+        if (os.path.isdir(self.dir)):
+            shutil.rmtree(self.dir)
+        os.mkdir(self.dir)
         # self.dir = "/atlas/u/jiaxuan/data/google_drive/img_full_output/"
         # self.dir = 'C:\\0machine_learning\\MODIS_data\\'
         # self.dir = 'F:/0SummerIntern/4_data_input/6_Data_county_processed/'
@@ -24,8 +31,8 @@ class fetch_data():
         # self.dir_output = '/atlas/u/jiaxuan/data/MODIS_data_county_processed_scaled/'
 
         # load yield data
-        self.data_yield = np.genfromtxt('yield_final_highquality.csv', delimiter=',')
-        self.locations = np.genfromtxt('locations_final.csv', delimiter=',')
+        self.data_yield = np.genfromtxt('/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final_highquality.csv', delimiter=',')
+        self.locations = np.genfromtxt('/content/datalab/notebooks/crop_yield_prediction/2 clean data/locations_final.csv', delimiter=',')
         # load soil and weather data
         # self.soil = np.genfromtxt(self.dir+'soil_output.csv', delimiter=',')
         # self.weather = np.genfromtxt(self.dir+'daymet_mean.csv', delimiter=',')
@@ -75,7 +82,11 @@ class fetch_data():
             loc1 = str(int(self.data_yield[i, 1]))
             loc2 = str(int(self.data_yield[i, 2]))
 
-            filename = year + '_' + loc1 + '_' + loc2 + '.mat'
+            # filename = year + '_' + loc1 + '_' + loc2 + '.mat'
+            filename = str(year)+'_'+str(loc1)+'_'+str(loc2)+ '.mat'
+            print "i: ", i
+            with open(os.path.join(self.dir, filename), 'w'):
+                pass
             content = io.loadmat(self.dir + filename)
             image_temp = content['image_divide']
             image_temp = self.filter_size(image_temp, 48)
@@ -249,6 +260,7 @@ class fetch_data():
         output_year = np.zeros([count_max])
         output_locations = np.zeros([count_max,2])
         output_index = np.zeros([count_max,2])
+
         for i in self.index_all:
             year = str(int(self.data_yield[i, 0]))
             loc1 = str(int(self.data_yield[i, 1]))
@@ -310,37 +322,56 @@ class fetch_data():
 
     # save mean data
     def save_data_mean(self):
-        output_image = np.zeros([self.index_all.shape[0], 32*9])
-        output_yield = np.zeros([self.index_all.shape[0]])
-        output_year = np.zeros([self.index_all.shape[0]])
-        output_locations = np.zeros([self.index_all.shape[0],2])
-        output_index = np.zeros([self.index_all.shape[0],2])
+        path, dirs, files = os.walk(self.dir).next()
+        file_count = len(files)
+        output_image = np.zeros([file_count, 32*9])
+        output_yield = np.zeros([file_count])
+        output_year = np.zeros([file_count])
+        output_locations = np.zeros([file_count,2])
+        output_index = np.zeros([file_count,2])
+#         output_image = np.zeros([self.index_all.shape[0], 32*9])
+#         output_yield = np.zeros([self.index_all.shape[0]])
+#         output_year = np.zeros([self.index_all.shape[0]])
+#         output_locations = np.zeros([self.index_all.shape[0],2])
+#         output_index = np.zeros([self.index_all.shape[0],2])
 
-        for i in self.index_all:
-            year = str(int(self.data_yield[i, 0]))
-            loc1 = str(int(self.data_yield[i, 1]))
-            loc2 = str(int(self.data_yield[i, 2]))
+        print file_count
+        for file in files:
+            year, loc1, loc2, ext = file.replace('_',' ').replace('.',' ').split()
+            print year, loc1, loc2
+#             year = str(int(self.data_yield[i, 0]))
+#             loc1 = str(int(self.data_yield[i, 1]))
+#             loc2 = str(int(self.data_yield[i, 2]))
 
             key = np.array([int(loc1),int(loc2)])
             index = np.where(np.all(self.locations[:,0:2].astype('int') == key, axis=1))
             longitude = self.locations[index,2]
             latitude = self.locations[index,3]
 
-            filename = year + '_' + loc1 + '_' + loc2 + '.npy'
-            image_temp = np.load(self.dir + filename)
+#             filename = year + '_' + loc1 + '_' + loc2 + '.npy'
+            image_temp = np.load(self.dir + file)
             image_temp = self.filter_timespan(image_temp, 49, 305, 9)
 
             image_temp = np.sum(image_temp,axis=(0,1))/np.count_nonzero(image_temp)*image_temp.shape[2]
             image_temp[np.isnan(image_temp)] = 0
-
-            output_image[i, :] = image_temp
-            output_yield[i] = self.data_yield[i, 3]
-            output_year[i] = int(year)
-            output_locations[i, 0] = longitude
-            output_locations[i, 1] = latitude
-            output_index[i,:] = np.array([int(loc1),int(loc2)])
+            
+            file_index = files.index(file)
+            output_image[file_index, :] = image_temp
+            for i in range(len(self.data_yield)):
+                out_yield = None
+                if float(year) == self.data_yield[i, 0] and float(loc1) == self.data_yield[i, 1] and float(loc2) == self.data_yield[i, 2]:
+                    out_yield = self.data_yield[i, 3]
+                    break
+            if not out_yield:
+                print "Error: no out_yield!"
+                break
+            output_yield[files.index(file)] = out_yield  # self.data_yield[i, 3]
+            output_year[file_index] = int(year)
+            output_locations[file_index, 0] = longitude
+            output_locations[file_index, 1] = latitude
+            output_index[file_index,:] = np.array([int(loc1),int(loc2)])
             # print image_temp.shape
-            print i,np.sum(image_temp),year,loc1,loc2
+            print file_index,np.sum(image_temp),year,loc1,loc2
         np.savez(self.dir+'histogram_all_mean.npz',
                  output_image=output_image,output_yield=output_yield,
                  output_year=output_year,output_locations=output_locations,output_index=output_index)
@@ -352,11 +383,11 @@ if __name__ == '__main__':
     # calculate mean
     # data.calc_mean()
 
-    # output_yield, output_image=data.next_batch(8,'train')
-    # print output_yield.shape,output_yield
-    # print output_image.shape,output_image
-
-    # preprocess_save_data()
+#     output_yield, output_image=data.next_batch(8,'train')
+#     print output_yield.shape,output_yield
+#     print output_image.shape,output_image
+    clean.preprocess_save_data()
+    print 'DONE preprocessing'
     # label,img=data.next_batch_hist(data.index_test.size,'test')
     # i=0
     # print img[i].shape, img[i].dtype, img[i][:,0,0].sum()
@@ -365,6 +396,7 @@ if __name__ == '__main__':
     # data.calc_mean()
     # i,a=data.next_batch_hist(32,'train')
     data.save_data_mean()
+    print 'DONE'
     # data.save_data()
     # data.save_data_mean()
     # data.save_data('validate')
