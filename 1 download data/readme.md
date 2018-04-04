@@ -36,9 +36,11 @@ https://explorer.earthengine.google.com/#detail/MODIS%2F006%2FMYD11A2 Layers 1 a
 
 There are two types of imagery exported in the data download process.  Imagery in tiles based on buffered lat/long locations and imagery clipped to shape boundaries.  For each of these location types there are several layers of information downloaded; temperature, land cover in multiple spectral bands, and a shape mask.
 
-1. A copy of the county shape file and related data is required for running the exports of data that are clipped to counties.  This feature is a publicly available set and must be cloned into your own Google namespace.  Once cloned look at the detail info for this item and find its identifier.  This identifer needs to replace the Feature ID used in the scripts as the one included is only accessible to the creating Google ID and not the General public.
-2. This climate data coverage is made up of a grid.  What would make the most sense (not currently in place) would be to download the coverages in the appropriate grids they are generated in and build from this complete worldwide coverage.
-3. Data products should be time aligned based on the date range of the land coverage usage type (Jan 2010-2013)
+1. A copy of the county shape file and related data is required for running the exports of data that are clipped to counties.  This feature is a publicly available [feature collection](https://fusiontables.google.com/data?docid=1S4EB6319wWW2sWQDPhDvmSBIVrD3iEmCLYB7nMM).  If using the public identifier of `ft:1S4EB6319wWW2sWQDPhDvmSBIVrD3iEmCLYB7nMM` Then the region filters should match the column names which are `CntyFips` and `StateFips` for selecting the county regions.  The contents of the various locations_XXX.csv files are simply extracts of `StateFips,CntyFips,Long,Lat` from this feature collection.
+
+2. Data products should be time aligned based on the date range of the land coverage usage type (Jan 2010-2013)
+
+3. This climate data coverage is made up of a grid.  What would make the most sense (not currently in place) would be to download the coverages in the appropriate grids they are generated in and build from this complete worldwide coverage.
 
 ## Helpful Hints
 
