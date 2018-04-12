@@ -4,13 +4,19 @@ import math
 import os
 import skimage.io
 import pandas as pd
-import gdal
-from scipy.ndimage import zoom
+from osgeo import gdal
+from scipy.ndimage.interpolation import zoom
 import shutil
-
+from os import listdir
+from os.path import isfile, join
 from joblib import Parallel, delayed
 import multiprocessing
+from multiprocessing import Pool
 
+
+img_output_dir="/content/ee-data/img_full_output/"
+img_zoom_output_dir="/content/ee-data/img_zoom_full_output/"
+count=1
 
 ################
 # Data range
@@ -24,9 +30,9 @@ import multiprocessing
 
 
 def check_data_integrity_del():
-    data = np.genfromtxt('/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final_highquality.csv', delimiter=',')
+    data = np.genfromtxt('yield_final_highquality.csv', delimiter=',')
     # check if they have related files
-    dir = "/content/ee-data/img_zoom_output/"
+    dir = "/atlas/u/jiaxuan/data/google_drive/img_zoom_output/"
     list_del = []
     for i in range(data.shape[0]):
         year = data[i,0]
@@ -39,14 +45,13 @@ def check_data_integrity_del():
 
     list_del = np.array(list_del)
     data_clean=np.delete(data, list_del, axis=0)
-    np.savetxt("/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final_highquality.csv", data_clean, delimiter=",")
-    #np.savetxt("yield_final_highquality.csv", data_clean, delimiter=",")
+    np.savetxt("yield_final_highquality.csv", data_clean, delimiter=",")
 
 def check_data_integrity():
     print 'begin'
-    data = np.genfromtxt('/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final_highquality.csv', delimiter=',')
+    data = np.genfromtxt('yield_final_highquality.csv', delimiter=',')
     # check if they have related files
-    dir = "/content/ee-data/img_output/"
+    dir = "/atlas/u/jiaxuan/data/google_drive/img_output/"
     for i in range(data.shape[0]):
         year = data[i,0]
         loc1 = data[i,1]
@@ -55,20 +60,6 @@ def check_data_integrity():
         if os.path.isfile(dir + filename)==False:
             print filename
     print 'end'
-
-# def check_data_integrity():
-#     data = pd.read_csv('locations_final.csv',header=None)
-#     # check if they have related files
-#     idx=0
-#     dir = "/atlas/u/jiaxuan/data/google_drive/data_image/"
-#     for loc1, loc2,_,_ in data.values:
-#         # filename = str(int(year)) + '_' + str(int(loc1)) + '_' + str(int(loc2)) + '.npz'
-#         filename = str(int(loc1)) + '_' + str(int(loc2)) + '.tif'
-#         if os.path.isfile(dir + filename)==False:
-#             print filename,idx
-#         idx+=1
-#     print 'done',idx
-#     print data.values.shape[0]
 
 def divide_image(img,first,step,num):
     image_list=[]
@@ -94,11 +85,6 @@ def merge_image(MODIS_img_list,MODIS_temperature_img_list):
         for j in range(0,img_shape[2]/7):
             img=MODIS_img_list[i][:,:,(j*7):(j*7+7)]
             temperature=MODIS_temperature_img_list[i][:,:,(j*2):(j*2+2)]
-            # print "img.shape: ", img.shape
-            # print "temperature.shape: ", temperature.shape
-            if temperature.shape[2] != 2 or img.shape[2] != 7:
-                # print 'continue merge'
-                continue
             merge[:,:,(j*9):(j*9+9)]=np.concatenate((img,temperature),axis=2)
         MODIS_list.append(merge)
     return MODIS_list
@@ -106,14 +92,8 @@ def merge_image(MODIS_img_list,MODIS_temperature_img_list):
 
 def mask_image(MODIS_list,MODIS_mask_img_list):
     MODIS_list_masked = []
-    # print 'modis list length: ', len(MODIS_list)
     for i in range(0, len(MODIS_list)):
         mask = np.tile(MODIS_mask_img_list[i],(1,1,MODIS_list[i].shape[2]))
-        # print 'mask shape: ', mask.shape
-        # print 'modis list shape: ', MODIS_list[i].shape
-        if mask.shape[2] != MODIS_list[i].shape[2]:
-            # print 'unmatched shapes, continuing without image'
-            continue
         masked_img = MODIS_list[i]*mask
         MODIS_list_masked.append(masked_img)
     return MODIS_list_masked
@@ -124,20 +104,26 @@ def quality_dector(image_temp):
         filter=filter_0*filter_5000
         return float(np.count_nonzero(filter))/image_temp.size
 
-def preprocess_save_data():
 
-    # MODIS_dir="/atlas/u/jiaxuan/data/google_drive/data_image"
-    MODIS_dir="/content/ee-data/Data_county"
-    # MODIS_temperature_dir="/atlas/u/jiaxuan/data/google_drive/data_temperature"
-    MODIS_temperature_dir="/content/ee-data/Data_county_temperature"
-    # MODIS_mask_dir="/atlas/u/jiaxuan/data/google_drive/data_mask"
-    MODIS_mask_dir="/content/ee-data/Data_county_mask"
+def create_gdal_array(file_path):
+    raster = gdal.Open(file_path)
+    arr = raster.ReadAsArray()
+    if not raster or not arr.size:
+        print("ERROR GDAL raster failed! raster_array: {}, raster: {} Skipping file: {}"
+              .format(file,
+               raster_array,
+               raster))
+        return
+    raster = None
+    return arr
 
-    # img_output_dir="/atlas/u/jiaxuan/data/google_drive/img_output/"
-    img_output_dir="/content/ee-data/img_output/"
-    if (os.path.isdir(img_output_dir)):
-        shutil.rmtree(img_output_dir)
-    os.mkdir(img_output_dir)
+
+def preprocess_save_data(file_tuple):  # img_output_dir, img_zoom_output_dir):
+#     MODIS_dir="/atlas/u/jiaxuan/data/google_drive/data_image"
+#     MODIS_temperature_dir="/atlas/u/jiaxuan/data/google_drive/data_temperature"
+#     MODIS_mask_dir="/atlas/u/jiaxuan/data/google_drive/data_mask"
+
+#     img_output_dir="/atlas/u/jiaxuan/data/google_drive/img_output/"
 
     # MODIS_processed_dir="C:/360Downloads/6_Data_county_processed_scaled/"
 
@@ -145,144 +131,77 @@ def preprocess_save_data():
     # MODIS_temperature_dir="/atlas/u/jiaxuan/data/MODIS_data_county_temperature"
     # MODIS_mask_dir="/atlas/u/jiaxuan/data/MODIS_data_county_mask"
     # MODIS_processed_dir="/atlas/u/jiaxuan/data/MODIS_data_county_processed_compressed/"
-
-    data_yield = np.genfromtxt('/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final.csv', delimiter=',', dtype=float)
-    count=1
-    for root, dirs, files in os.walk(MODIS_dir):
-        print 'root, dirs: ', root, dirs
-#         print "number of files: ", len(files)
-        for file in files:
-#             print 'file: ', file
-            if file.endswith(".tif"):
-                MODIS_path=os.path.join(MODIS_dir, file)
-                # check file size to see if it's broken
-                # if os.path.getsize(MODIS_path) < 10000000:
-                #     print 'file broken, continue'
-                #     continue
-                MODIS_temperature_path=os.path.join(MODIS_temperature_dir,file)
-                MODIS_mask_path=os.path.join(MODIS_mask_dir,file)
-
-                # get geo location
-                raw = file.replace('_',' ').replace('.',' ').split()
-                loc1 = int(raw[0])
-                loc2 = int(raw[1])
-                # read image
-                try:
-                    MODIS_img = np.transpose(np.array(gdal.Open(MODIS_path).ReadAsArray(), dtype='uint16'),axes=(1,2,0))
-                except ValueError as msg:
-                    print msg
-                    continue
-                # read temperature
-                MODIS_temperature_img = np.transpose(np.array(gdal.Open(MODIS_temperature_path).ReadAsArray(), dtype='uint16'),axes=(1,2,0))
-                # shift
-                MODIS_temperature_img = MODIS_temperature_img-12000
-                # scale
-                MODIS_temperature_img = MODIS_temperature_img*1.25
-                # clean
-                MODIS_temperature_img[MODIS_temperature_img<0]=0
-                MODIS_temperature_img[MODIS_temperature_img>5000]=5000
-                # read mask
-                MODIS_mask_img = np.transpose(np.array(gdal.Open(MODIS_mask_path).ReadAsArray(), dtype='uint16'),axes=(1,2,0))
-                # Non-crop = 0, crop = 1
-                MODIS_mask_img[MODIS_mask_img != 12] = 0
-                MODIS_mask_img[MODIS_mask_img == 12] = 1
-
-                # Divide image into years
-                MODIS_img_list=divide_image(MODIS_img, 0, 46 * 7, 14)
-                MODIS_temperature_img_list = divide_image(MODIS_temperature_img, 0, 46 * 2, 14)
-                MODIS_mask_img = extend_mask(MODIS_mask_img, 3)
-                MODIS_mask_img_list = divide_image(MODIS_mask_img, 0, 1, 14)
-
-                # Merge image and temperature
-                MODIS_list = merge_image(MODIS_img_list,MODIS_temperature_img_list)
-
-                # Do the mask job
-                MODIS_list_masked = mask_image(MODIS_list,MODIS_mask_img_list)
-
-                # check if the result is in the list
-                year_start = 2003
-#                 print len(MODIS_list_masked)
-                for i in range(0, len(MODIS_list_masked)):
-#                     print "file: ", file, " at position: ", i
-                    year = i+year_start
-                    # print 'year: ', year
-                    key = np.array([year,loc1,loc2])
-                    # print 'key: ', key
-                    if np.sum(np.all(data_yield[:,0:3] == key, axis=1))>0:
-#                         print 'after np.sum'
-                        # save as .npy
-                        filename=str(year)+'_'+str(loc1)+'_'+str(loc2)+'.npy'
-#                         print 'got filename'
-#                         if "38_51" in file and i == 6:
-#                             print MODIS_list_masked[6]
-#                         if "31_159" in file and i == 11:
-#                             from IPython.core.debugger import Tracer; Tracer()()
-                        np.save(img_output_dir + filename, MODIS_list_masked[i])
-                        # print filename,':written ',str(count)
-#                         print 'moving on...'
-                        count+=1
-#                         print 'in loop'
-#                 print "end of loop"
-                if "19_57" in file:
-                    break
-
-def preprocess_save_data_parallel(file):
-    # MODIS_dir="/atlas/u/jiaxuan/data/google_drive/data_image_full"
-    MODIS_dir="/content/ee-data/Data_county"
-    # MODIS_temperature_dir="/atlas/u/jiaxuan/data/google_drive/data_temperature"
-    MODIS_temperature_dir="/content/ee-data/Data_county_temperature"
-    # MODIS_mask_dir="/atlas/u/jiaxuan/data/google_drive/data_mask"
-    MODIS_mask_dir="/content/ee-data/Data_county_mask"
-
-    # img_output_dir="/atlas/u/jiaxuan/data/google_drive/img_output/"
-    img_output_dir="/content/ee-data/img_full_output/"
-    os.mkdir(img_output_dir)
     
-    #img_zoom_output_dir="/atlas/u/jiaxuan/data/google_drive/img_zoom_full_output/"
-    img_zoom_output_dir="/content/ee-data/img_zoom_full_output/"
-
-    # MODIS_processed_dir="C:/360Downloads/6_Data_county_processed_scaled/"
-
-    # MODIS_dir="/atlas/u/jiaxuan/data/MODIS_data_county/3_Data_county"
-    # MODIS_temperature_dir="/atlas/u/jiaxuan/data/MODIS_data_county_temperature"
-    # MODIS_mask_dir="/atlas/u/jiaxuan/data/MODIS_data_county_mask"
-    # MODIS_processed_dir="/atlas/u/jiaxuan/data/MODIS_data_county_processed_compressed/"
-
+#     data_yield = np.genfromtxt('yield_final.csv', delimiter=',', dtype=float)
+    MODIS_dir="/content/ira-gdrive/Data2/"
+    MODIS_mask_dir="/content/ira-gdrive/data_mask/"
+    MODIS_temperature_dir="/content/ira-gdrive/data_temperature/"
     data_yield = np.genfromtxt('/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final.csv', delimiter=',', dtype=float)
-    if file.endswith(".tif"):
-        MODIS_path=os.path.join(MODIS_dir, file)
-        # check file size to see if it's broken
-        # if os.path.getsize(MODIS_path) < 10000000:
-        #     print 'file broken, continue'
-        #     continue
-        MODIS_temperature_path=os.path.join(MODIS_temperature_dir,file)
-        MODIS_mask_path=os.path.join(MODIS_mask_dir,file)
+
+    index, tif_file = file_tuple
+    #     print("File, index, PID: {}, {}, {} ".format(tif_file, index, multiprocessing.current_process().name))
+    print ("File: {}".format(tif_file))
+    # 1_3 check what it is...?
+    broken_images = ['17_97.tif', '26_141.tif', '1_3.tif', '29_3.tif', '38_101.tif', '51_159.tif', '46_93.tif', 
+                     '17_187.tif', '31_159.tif', '20_115.tif', '22_23.tif', '17_177.tif', '27_39.tif', '51_135.tif', 
+                     '1_33.tif', '26_69.tif', '51_41.tif', '46_95.tfi', '27_77.tif', '31_87.tif', '27_35.tif', '45_3.tif', 
+                     '27_143.tif', '22_19.tif', '13_37.tif', '13_119.tif', '13_43.tif', '17_139.tif', '29_157.tif',
+                     '18_17.tif', '20_207.tif', '21_69.tif', '26_9.tif']
+#     for root, dirs, files in os.walk(MODIS_dir):
+#     continue_preprocess = False
+
+#     for tif_file in files:
+#         if file not in '1_33.tif' and not continue_preprocess:
+#             continue
+#         elif file in '1_33.tif':
+#             continue_preprocess = True
+#             continue
+    if tif_file.endswith(".tif"):
+        if tif_file in broken_images:
+            print("skipping {} due to numpy multiple errors".format(tif_file))
+            return
+        MODIS_path=os.path.join(MODIS_dir, tif_file)
+#             check file size to see if it's broken
+#         if os.path.getsize(MODIS_path) < 10000000:
+#             print 'file broken, continue'
+#             return
+        MODIS_temperature_path=os.path.join(MODIS_temperature_dir,tif_file)
+        MODIS_mask_path=os.path.join(MODIS_mask_dir,tif_file)
 
         # get geo location
-        raw = file.replace('_',' ').replace('.',' ').split()
+        raw = tif_file.replace('_',' ').replace('.',' ').split()
         loc1 = int(raw[0])
         loc2 = int(raw[1])
         # read image
         try:
-            MODIS_img = np.transpose(np.array(gdal.Open(MODIS_path).ReadAsArray(), dtype='uint16'),axes=(1,2,0))
+            # TODO why the shift, scale, clean on temperature only? Also what wavelengths are all of these?
+            # Are they the same scale?
+            MODIS_raster_arr = create_gdal_array(MODIS_path)
+#             print (MODIS_raster_arr)
+            MODIS_img = np.transpose(np.array(MODIS_raster_arr, dtype='uint16'),axes=(1,2,0))
+            # read temperature
+            MODIS_raster_temp_arr = create_gdal_array(MODIS_temperature_path)
+            MODIS_temperature_img = np.transpose(np.array(MODIS_raster_temp_arr, dtype='uint16'),axes=(1,2,0))
+            # shift
+            MODIS_temperature_img = MODIS_temperature_img-12000
+            # scale
+            MODIS_temperature_img = MODIS_temperature_img*1.25
+            # clean
+            MODIS_temperature_img[MODIS_temperature_img<0]=0
+            MODIS_temperature_img[MODIS_temperature_img>5000]=5000
+            # read mask
+            MODIS_raster_mask_arr = create_gdal_array(MODIS_mask_path)
+            MODIS_mask_img = np.transpose(np.array(MODIS_raster_mask_arr, dtype='uint16'),axes=(1,2,0))
+            # Non-crop = 0, crop = 1
+            MODIS_mask_img[MODIS_mask_img != 12] = 0
+            MODIS_mask_img[MODIS_mask_img == 12] = 1
+            
+
         except ValueError as msg:
             print msg
-        # read temperature
-        MODIS_temperature_img = np.transpose(np.array(gdal.Open(MODIS_temperature_path).ReadAsArray(), dtype='uint16'),axes=(1,2,0))
-        # shift
-        # MODIS_temperature_img = MODIS_temperature_img-12000
-        # scale
-        # MODIS_temperature_img = MODIS_temperature_img*1.25
-        # clean
-        # MODIS_temperature_img[MODIS_temperature_img<0]=0
-        # MODIS_temperature_img[MODIS_temperature_img>5000]=5000
-        # read mask
-        MODIS_mask_img = np.transpose(np.array(gdal.Open(MODIS_mask_path).ReadAsArray(), dtype='uint16'),axes=(1,2,0))
-        # Non-crop = 0, crop = 1
-        MODIS_mask_img[MODIS_mask_img != 12] = 0
-        MODIS_mask_img[MODIS_mask_img == 12] = 1
+            return
 
-        # Divide image into years
+        # Divide image into years in range: 2002-12-31 to 2016-8-4
         MODIS_img_list=divide_image(MODIS_img, 0, 46 * 7, 14)
         MODIS_temperature_img_list = divide_image(MODIS_temperature_img, 0, 46 * 2, 14)
         MODIS_mask_img = extend_mask(MODIS_mask_img, 3)
@@ -300,48 +219,59 @@ def preprocess_save_data_parallel(file):
             year = i+year_start
             key = np.array([year,loc1,loc2])
             if np.sum(np.all(data_yield[:,0:3] == key, axis=1))>0:
-                # # detect quality
-                # quality = quality_dector(MODIS_list_masked[i])
-                # if quality < 0.01:
-                #     print 'omitted'
-                #     print year,loc1,loc2,quality
-
-                    # # delete
-                    # yield_all = np.genfromtxt('yield_final_highquality.csv', delimiter=',')
-                    # key = np.array([year,loc1,loc2])
-                    # index = np.where(np.all(yield_all[:,0:3] == key, axis=1))
-                    # yield_all=np.delete(yield_all, index, axis=0)
-                    # np.savetxt("yield_final_highquality.csv", yield_all, delimiter=",")
-
-                    # continue
-
-                ## 1 save original file
+                # save as .npy
                 filename=img_output_dir+str(year)+'_'+str(loc1)+'_'+str(loc2)+'.npy'
                 np.save(filename,MODIS_list_masked[i])
-                print filename,':written '
-
-                ## 2 save zoomed file (48*48)
-                zoom0 = float(48) / MODIS_list_masked[i].shape[0]
-                zoom1 = float(48) / MODIS_list_masked[i].shape[1]
-                output_image = zoom(MODIS_list_masked[i], (zoom0, zoom1, 1))
-
-                filename=img_zoom_output_dir+str(year)+'_'+str(loc1)+'_'+str(loc2)+'.npy'
-                np.save(filename,output_image)
-                print filename,':written '
-
+#                 print filename,':written '  # ,str(count)
+        del MODIS_raster_arr
+        del MODIS_raster_temp_arr
+        del MODIS_raster_mask_arr
 
                 
 
 if __name__ == "__main__":
     # # save data
-    # MODIS_dir="/atlas/u/jiaxuan/data/google_drive/data_image_full"
-    MODIS_dir="/content/ee-data/Data_county"
-    for _, _, files in os.walk(MODIS_dir):
-        Parallel(n_jobs=12)(delayed(preprocess_save_data_parallel)(file) for file in files)
+#     MODIS_dir="/content/ee-data/Data/"
+    MODIS_dir="/content/ira-gdrive/Data2/"
+        # img_output_dir="/atlas/u/jiaxuan/data/google_drive/img_output/"
+    if (os.path.isdir(img_output_dir)):
+        shutil.rmtree(img_output_dir)
+    os.mkdir(img_output_dir)
+    
+    #img_zoom_output_dir="/atlas/u/jiaxuan/data/google_drive/img_zoom_full_output/"
+    if (os.path.isdir(img_zoom_output_dir)):
+        shutil.rmtree(img_zoom_output_dir)
+    os.mkdir(img_zoom_output_dir)
+
+
+#     for _, _, files in os.walk(MODIS_dir):
+#         Parallel(n_jobs=12)(delayed(preprocess_save_data_parallel)(file) for file in files)
+#     for _, _, files in os.walk(MODIS_dir):
+#         print (len(files))
+#         file_count = 0
+#         for file in files:
+#             file_count+=1
+#             print("File: {}, file_count: {}".format(file, file_count))
+#             preprocess_save_data_parallel(file, img_output_dir, img_zoom_output_dir)
+
+    print ("STARTING CLEAN...")
+    files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
+    for f in enumerate(files):
+        preprocess_save_data(f)
+#    try:
+#        p = Pool(60)
+#        files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
+#        print("Number of files: ", len(files))
+#        p.map(preprocess_save_data, enumerate(files))
+#    except KeyboardInterrupt:
+#        p.terminate()
+#        p.join()
+#    preprocess_save_data(img_output_dir, img_zoom_output_dir)
+            
+    print("DONE")
 
     # # clean yield (low quality)
     # check_data_integrity_del()
     # # check integrity
     # check_data_integrity()
-
 
