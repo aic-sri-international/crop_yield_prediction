@@ -2,6 +2,8 @@
 
 The data source for the models in this project comes from the MODIS information available in the Google Earth Engine.  In order to work with the data a Google Account is required along with a sufficently large (recommend 1TB) Google Drive to accomidate saving imagery from earth engine export commands.
 
+
+
 1. Create a Kubernetes instance of the Data Lab environment for executing the download scripts.  A local docker instance would be minimally sufficent and could be adapted from `google-datalab.yaml`. Comand: `kubectl create -f google-datalab.yaml`
 
 2. Request access to the Google Earth Engine service for your Google account.  At present this service is available as an invite only beta.  There is a request process to have access granted to your account.  Expect a day or two for this approval based on recent experience (Dec 2017).
@@ -16,7 +18,7 @@ The data source for the models in this project comes from the MODIS information 
 
 The datasets downloaded are primarily from [MODIS](https://en.wikipedia.org/wiki/Moderate-resolution_imaging_spectroradiometer) satelite coverage and are:
 
-* MODIS reflectivity hyperspectral imagery layers 1-7 http://dx.doi.org/10.5067/MODIS/MOD09A1.006 - 
+* MODIS reflectivity hyperspectral imagery (layers 1-7) http://dx.doi.org/10.5067/MODIS/MOD09A1.006 - 
 https://explorer.earthengine.google.com/#detail/MODIS%2F006%2FMOD09A1
 
 * Surface temperature (day and night) at 1km/pixel http://dx.doi.org/10.5067/MODIS/MYD11A2.006 - 
@@ -44,6 +46,6 @@ There are two types of imagery exported in the data download process.  Imagery i
 
 ## Helpful Hints
 
-* When each script runs it will output a series of task ready events.  These events do not indicate the Google Earth engine task was successfully completed.  It is useful to run `earthengine task list > status` followed by `less status` to review the recent generated task output.  As the Earth engine executes the queued jobs there will be success and failure status recorded against each job.
+* When each script runs it will output a series of task ready events.  These events do not indicate the Google Earth engine task was successfully completed.  It is useful to run `earthengine task list > status` followed by `less status` to review the recent generated task output.  As the Earth engine executes each queued job their status will be set to success or failure from `READY`.
 * The GRIVE software package for Ubuntu can be used to pull data from Google Drive directly to the instances on a cluster that will process the imagery.
 
