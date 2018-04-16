@@ -1,17 +1,13 @@
 import numpy as np
-import scipy.io as io
-import math
 import os
-import skimage.io
-import pandas as pd
 from osgeo import gdal
-from scipy.ndimage.interpolation import zoom
 import shutil
 from os import listdir
 from os.path import isfile, join
-from joblib import Parallel, delayed
-import multiprocessing
-from multiprocessing import Pool
+
+# from joblib import Parallel, delayed
+# import multiprocessing
+# from multiprocessing import Pool
 
 img_output_dir = "/content/ee-data/img_full_output/"
 img_zoom_output_dir = "/content/ee-data/img_zoom_full_output/"
@@ -31,7 +27,7 @@ count = 1
 
 def divide_image_by_year(img, current_year, samples_per_year, total_years):
     """
-    Divide state-county image stack by crop yield years
+    Divide state-county image stack by crop yield years.
 
     :param img: input image stack
     :param current_year: starting year and currently iterated year
@@ -49,7 +45,7 @@ def divide_image_by_year(img, current_year, samples_per_year, total_years):
 
 def extend_mask(img, columns):
     """
-    Extends image mask data by the specified number of columns with duplicates of the last column
+    Extends image mask data by the specified number of columns with duplicates of the last column.
 
     :param img: input image
     :param columns: number of columns to be added
@@ -62,6 +58,13 @@ def extend_mask(img, columns):
 
 # very dirty... but should work
 def merge_image(MODIS_img_list, MODIS_temperature_img_list):
+    """
+    Merges the 7 bands from the original image with the 2 bands from the temperature image
+
+    :param MODIS_img_list: list of 7 band images
+    :param MODIS_temperature_img_list: list of 2 band images
+    :return: list of 9 band images
+    """
     MODIS_list = []
     for i in range(0, len(MODIS_img_list)):
         img_shape = MODIS_img_list[i].shape
@@ -77,6 +80,14 @@ def merge_image(MODIS_img_list, MODIS_temperature_img_list):
 
 
 def mask_image(MODIS_list, MODIS_mask_img_list):
+    """
+    Apply mask to image file to filter according to specified mask. Elements are either 0 or original value depending
+    on mask.
+
+    :param MODIS_list: list of 9 band images
+    :param MODIS_mask_img_list: list of masks
+    :return: list of masked 9 band images
+    """
     MODIS_list_masked = []
     for i in range(0, len(MODIS_list)):
         mask = np.tile(MODIS_mask_img_list[i], (1, 1, MODIS_list[i].shape[2]))
@@ -85,27 +96,28 @@ def mask_image(MODIS_list, MODIS_mask_img_list):
     return MODIS_list_masked
 
 
-def quality_dector(image_temp):
-    filter_0 = image_temp > 0
-    filter_5000 = image_temp < 5000
-    filter = filter_0 * filter_5000
-    return float(np.count_nonzero(filter)) / image_temp.size
-
-
 def create_gdal_array(file_path):
+    """
+    Rasterize a file.
+
+    :param file_path: location of file
+    :return: array with pixel values of the rasterized file
+    """
     raster = gdal.Open(file_path)
     arr = raster.ReadAsArray()
     if not raster or not arr.size:
-        print("ERROR GDAL raster failed! raster_array: {}, raster: {} Skipping file: {}"
-              .format(file,
-                      raster_array,
-                      raster))
+        print("ERROR GDAL raster failed! raster_array: {}, raster: {} Skipping file: {}".format(file_path, arr, raster))
         return
-    raster = None
     return arr
 
 
 def preprocess_save_data(file_tuple):
+    """
+    Modify the file to be 9 bands, masked for target crop, and converted into proper spectrum and dimensions
+
+    :param file_tuple: the index (unused) and tif file
+    :return: None if an error was encountered or if the file is one of the black listed images
+    """
     MODIS_dir = "/content/ira-gdrive/Data2/"
     MODIS_mask_dir = "/content/ira-gdrive/data_mask/"
     MODIS_temperature_dir = "/content/ira-gdrive/data_temperature/"
@@ -113,19 +125,20 @@ def preprocess_save_data(file_tuple):
                                delimiter=',', dtype=float)
 
     index, tif_file = file_tuple
-    #     print("File, index, PID: {}, {}, {} ".format(tif_file, index, multiprocessing.current_process().name))
-    print ("File: {}".format(tif_file))
-    # 1_3 check what it is...?
+    print("File: {}".format(tif_file))
+
+    # TODO: Need to figure out why these files are broken. Can they be fixed or filtered better?
     broken_images = ['17_97.tif', '26_141.tif', '1_3.tif', '29_3.tif', '38_101.tif', '51_159.tif', '46_93.tif',
                      '17_187.tif', '31_159.tif', '20_115.tif', '22_23.tif', '17_177.tif', '27_39.tif', '51_135.tif',
                      '1_33.tif', '26_69.tif', '51_41.tif', '46_95.tfi', '27_77.tif', '31_87.tif', '27_35.tif',
-                     '45_3.tif',
-                     '27_143.tif', '22_19.tif', '13_37.tif', '13_119.tif', '13_43.tif', '17_139.tif', '29_157.tif',
-                     '18_17.tif', '20_207.tif', '21_69.tif', '26_9.tif']
+                     '45_3.tif', '27_143.tif', '22_19.tif', '13_37.tif', '13_119.tif', '13_43.tif', '17_139.tif',
+                     '29_157.tif', '18_17.tif', '20_207.tif', '21_69.tif', '26_9.tif']
+
     if tif_file.endswith(".tif"):
         if tif_file in broken_images:
             print("skipping {} due to numpy multiple errors".format(tif_file))
             return
+
         MODIS_path = os.path.join(MODIS_dir, tif_file)
         MODIS_temperature_path = os.path.join(MODIS_temperature_dir, tif_file)
         MODIS_mask_path = os.path.join(MODIS_mask_dir, tif_file)
@@ -136,10 +149,9 @@ def preprocess_save_data(file_tuple):
         loc2 = int(raw[1])
         # read image
         try:
-            # TODO why the shift, scale, clean on temperature only? Also what wavelengths are all of these?
+            # TODO: why the shift, scale, clean on temperature only? Also what wavelengths are all of these?
             # Are they the same scale?
-            MODIS_raster_arr = create_gdal_array(MODIS_path)
-            #             print (MODIS_raster_arr)
+            MODIS_raster_arr = create_gdal_array(file_path=MODIS_path)
             MODIS_img = np.transpose(np.array(MODIS_raster_arr, dtype='uint16'), axes=(1, 2, 0))
             # read temperature
             MODIS_raster_temp_arr = create_gdal_array(MODIS_temperature_path)
@@ -157,26 +169,26 @@ def preprocess_save_data(file_tuple):
             # Non-crop = 0, crop = 1
             MODIS_mask_img[MODIS_mask_img != 12] = 0
             MODIS_mask_img[MODIS_mask_img == 12] = 1
-
-
         except ValueError as msg:
-            print msg
+            print(msg)
             return
+
+
+        # Extend mask img to accomidate new bands
+        MODIS_mask_img = extend_mask(img=MODIS_mask_img, columns=3)
 
         # Divide image into years in range: 2002-12-31 to 2016-8-4
         MODIS_img_list = divide_image_by_year(img=MODIS_img, current_year=0, samples_per_year=46 * 7, total_years=14)
         MODIS_temperature_img_list = divide_image_by_year(img=MODIS_temperature_img, current_year=0,
-                                                          samples_per_year=46 * 2,
-                                                          total_years=14)
-        MODIS_mask_img = extend_mask(img=MODIS_mask_img, columns=3)
+                                                          samples_per_year=46 * 2, total_years=14)
         MODIS_mask_img_list = divide_image_by_year(img=MODIS_mask_img, current_year=0, samples_per_year=1,
                                                    total_years=14)
 
         # Merge image and temperature
-        MODIS_list = merge_image(MODIS_img_list, MODIS_temperature_img_list)
+        MODIS_list = merge_image(MODIS_img_list=MODIS_img_list, MODIS_temperature_img_list=MODIS_temperature_img_list)
 
         # Do the mask job
-        MODIS_list_masked = mask_image(MODIS_list, MODIS_mask_img_list)
+        MODIS_list_masked = mask_image(MODIS_list=MODIS_list, MODIS_mask_img_list=MODIS_mask_img_list)
 
         # check if the result is in the list
         year_start = 2003
@@ -187,7 +199,8 @@ def preprocess_save_data(file_tuple):
                 # save as .npy
                 filename = img_output_dir + str(year) + '_' + str(loc1) + '_' + str(loc2) + '.npy'
                 np.save(filename, MODIS_list_masked[i])
-            #                 print filename,':written '  # ,str(count)
+
+        # Dealloc the C level pointers
         del MODIS_raster_arr
         del MODIS_raster_temp_arr
         del MODIS_raster_mask_arr
@@ -195,22 +208,19 @@ def preprocess_save_data(file_tuple):
 
 if __name__ == "__main__":
     # # save data
-    #     MODIS_dir="/content/ee-data/Data/"
     MODIS_dir = "/content/ira-gdrive/Data2/"
-    # img_output_dir="/atlas/u/jiaxuan/data/google_drive/img_output/"
     if (os.path.isdir(img_output_dir)):
         shutil.rmtree(img_output_dir)
     os.mkdir(img_output_dir)
 
-    # img_zoom_output_dir="/atlas/u/jiaxuan/data/google_drive/img_zoom_full_output/"
     if (os.path.isdir(img_zoom_output_dir)):
         shutil.rmtree(img_zoom_output_dir)
     os.mkdir(img_zoom_output_dir)
 
-    print ("STARTING CLEAN...")
+    print("STARTING CLEAN...")
     files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
     for f in enumerate(files):
-        preprocess_save_data(f)
+        preprocess_save_data(file_tuple=f)
     #    try:
     #        p = Pool(60)
     #        files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
