@@ -26,14 +26,23 @@ count = 1
 
 
 def divide_image_by_year(img, current_year, samples_per_year, total_years):
-    """
-    Divide state-county image stack by crop yield years.
+    """Divide state-county image stack by crop yield years.
 
-    :param img: input image stack
-    :param current_year: starting year and currently iterated year
-    :param samples_per_year: number of total samples taken in a given year times number of bands
-    :param total_years: total years in sample set
-    :return: list of images split by year ranges
+    Parameters
+    ----------
+    img
+        input image stack
+    current_year
+        starting year and currently iterated year
+    samples_per_year
+        number of total samples taken in a given year times number of bands
+    total_years
+        total years in sample set
+
+    Returns
+    -------
+    list of images split by year ranges
+
     """
     image_list = []
     for i in range(0, total_years - 1):
@@ -44,12 +53,18 @@ def divide_image_by_year(img, current_year, samples_per_year, total_years):
 
 
 def extend_mask(img, columns):
-    """
-    Extends image mask data by the specified number of columns with duplicates of the last column.
+    """Extends image mask data by the specified number of columns with duplicates of the last column.
 
-    :param img: input image
-    :param columns: number of columns to be added
-    :return: new image mask with padding at the end columns
+    Parameters
+    ----------
+    img
+        input image
+    columns
+        number of columns to be added
+    Returns
+    -------
+    new image mask with padding at the end columns
+
     """
     for i in range(0, columns):
         img = np.concatenate((img, img[:, :, -2:-1]), axis=2)
@@ -58,12 +73,19 @@ def extend_mask(img, columns):
 
 # very dirty... but should work
 def merge_image(MODIS_img_list, MODIS_temperature_img_list):
-    """
-    Merges the 7 bands from the original image with the 2 bands from the temperature image
+    """Merges the 7 bands from the original image with the 2 bands from the temperature image
 
-    :param MODIS_img_list: list of 7 band images
-    :param MODIS_temperature_img_list: list of 2 band images
-    :return: list of 9 band images
+    Parameters
+    ----------
+    MODIS_img_list
+        list of 7 band images
+    MODIS_temperature_img_list
+        list of 2 band images
+
+    Returns
+    -------
+    list of 9 band images
+
     """
     MODIS_list = []
     for i in range(0, len(MODIS_img_list)):
@@ -80,13 +102,19 @@ def merge_image(MODIS_img_list, MODIS_temperature_img_list):
 
 
 def mask_image(MODIS_list, MODIS_mask_img_list):
-    """
-    Apply mask to image file to filter according to specified mask. Elements are either 0 or original value depending
-    on mask.
+    """Apply mask to image file to filter according to specified mask. Elements are either 0 or original value depending
 
-    :param MODIS_list: list of 9 band images
-    :param MODIS_mask_img_list: list of masks
-    :return: list of masked 9 band images
+    Parameters
+    ----------
+    MODIS_list
+        list of 9 band images
+    MODIS_mask_img_list
+        list of masks
+
+    Returns
+    -------
+    list of masked 9 band images
+
     """
     MODIS_list_masked = []
     for i in range(0, len(MODIS_list)):
@@ -97,11 +125,16 @@ def mask_image(MODIS_list, MODIS_mask_img_list):
 
 
 def create_gdal_array(file_path):
-    """
-    Rasterize a file.
+    """Rasterize a file.
 
-    :param file_path: location of file
-    :return: array with pixel values of the rasterized file
+    Parameters
+    ----------
+    file_path
+        location of file
+
+    Returns
+    -------
+    array with pixel values of the rasterized file
     """
     raster = gdal.Open(file_path)
     arr = raster.ReadAsArray()
@@ -112,11 +145,16 @@ def create_gdal_array(file_path):
 
 
 def preprocess_save_data(file_tuple):
-    """
-    Modify the file to be 9 bands, masked for target crop, and converted into proper spectrum and dimensions
+    """Modify the file to be 9 bands, masked for target crop, and converted into proper spectrum and dimensions
+    Parameters
+    ----------
+    file_tuple
+        the index (unused) and tif file
 
-    :param file_tuple: the index (unused) and tif file
-    :return: None if an error was encountered or if the file is one of the black listed images
+    Returns
+    -------
+    None if an error was encountered or if the file is one of the black listed images
+
     """
     MODIS_dir = "/content/ira-gdrive/Data2/"
     MODIS_mask_dir = "/content/ira-gdrive/data_mask/"
