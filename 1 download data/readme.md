@@ -14,6 +14,8 @@ The data source for the models in this project comes from the MODIS information 
 
 5. Execute the scripts within the pod to generate data into your Google Drive.  It is recommended that to verify the install is working by importing `ee` into a python REPL and executing `ee.Initialize()` and verifying that no errors are reported.
 
+6. The `generate_*.py` script files will create the proper list of images from the data layers appropriately clipped to the county boundary.  While other regions were included in the repository previously the regions clipped to county boundary are used because they match the region for crop yield data.
+
 ## Data Sets Used
 
 The datasets downloaded are primarily from [MODIS](https://en.wikipedia.org/wiki/Moderate-resolution_imaging_spectroradiometer) satelite coverage and are:
