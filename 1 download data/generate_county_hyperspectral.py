@@ -66,7 +66,7 @@ for loc1, loc2, lat, lon in locations.values:
 
     while True:
         try:
-            export_oneimage(img.clip(region), 'test', fname, scale, crs)
+            export_oneimage(img.clip(region), 'data', fname, scale, crs)
         except Exception as ex:
             print("Unexpected error:", ex)
             print("Failed on:", fname)
