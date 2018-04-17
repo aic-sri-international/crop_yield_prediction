@@ -9,20 +9,31 @@ from os.path import isfile, join
 # import multiprocessing
 # from multiprocessing import Pool
 
-img_output_dir = "/content/ee-data/img_full_output/"
-img_zoom_output_dir = "/content/ee-data/img_zoom_full_output/"
-count = 1
+"""Data preprocessing pipeline
 
+Combines and filters geotiff files to numpy array objects and saves them to disk.
 
+Original Doc:
 ################
 # Data range
 # MODIS: 2003-2016, 14 years
 # MODIS_landcover: 2003-2013, 12 years
 # MODIS_temperature: 2003_2015, 13 years
-
 # Intersection: 2003-2013, 11 years
-
 ################
+
+Example
+-------
+Run this pipeline:
+
+    $ python final_clean_data.py
+
+"""
+
+# Global Variables
+img_output_dir = "/content/ee-data/img_full_output/"
+img_zoom_output_dir = "/content/ee-data/img_zoom_full_output/"
+count = 1
 
 
 def divide_image_by_year(img, current_year, samples_per_year, total_years):
@@ -146,6 +157,7 @@ def create_gdal_array(file_path):
 
 def preprocess_save_data(file_tuple):
     """Modify the file to be 9 bands, masked for target crop, and converted into proper spectrum and dimensions
+
     Parameters
     ----------
     file_tuple
@@ -210,7 +222,6 @@ def preprocess_save_data(file_tuple):
         except ValueError as msg:
             print(msg)
             return
-
 
         # Extend mask img to accomidate new bands
         MODIS_mask_img = extend_mask(img=MODIS_mask_img, columns=3)
