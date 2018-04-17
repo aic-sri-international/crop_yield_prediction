@@ -177,10 +177,15 @@ class CropHistograms():
         output_locations = np.zeros([self.index_all.shape[0],2])
         output_index = np.zeros([self.index_all.shape[0],2])
 
+        more_broken_files = ['2006_1_19']
         for i in self.index_all:
             year = str(int(self.data_yield[i, 0]))
             loc1 = str(int(self.data_yield[i, 1]))
             loc2 = str(int(self.data_yield[i, 2]))
+            # TODO: this is bad. Need to find out why these files are broken. Probably happened in clean step?
+            if str(year + '_' + loc1 + '_' + loc2) in more_broken_files:
+                print("broken file encountered: {}".format(str(year + '_' + loc1 + '_' + loc2)))
+                continue
 
             location = None
             for l in self.locations:
