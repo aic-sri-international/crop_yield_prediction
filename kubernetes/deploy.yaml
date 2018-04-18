@@ -1,19 +1,55 @@
-Name:           datalab-crop-yield
-Namespace:      world-builders
-Labels:         app=datalab-crop-yield
-                pod-template-hash=803629802
-Controlled By:  ReplicaSet/datalab-crop-yield-d47b6fd46
-Containers:
-  datalab:
-    Image:          worldmodelers.cse.sri.com/crop-yield:v1.2
-    Requests:
-      cpu:     20
-      memory:  1Gi
-    Mounts:
-      /content
-      /var/run/secrets/kubernetes.io/serviceaccount
-Volumes:
-  crop-yield-data:
-    Type:       PersistentVolumeClaim
-    ClaimName:  crop-yield-data-claim
-    ReadOnly:   false
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: datalab-crop-yield
+  name: datalab-crop-yield
+  namespace: world-builders
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: datalab-crop-yield
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: datalab-crop-yield
+      namespace: world-builders
+    spec:
+      containers:
+      - env:
+        - name: PROJECT_ID
+          value: datalab-crop-yield
+        image: worldmodelers.cse.sri.com/crop-yield:v1.3
+        imagePullPolicy: Always
+        name: datalab
+        ports:
+        - containerPort: 8888
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "20"
+            memory: 1Gi
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /content
+          name: crop-yield-data
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: wm-artifactory-secret
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: crop-yield-data
+        persistentVolumeClaim:
+          claimName: crop-yield-data-claim
