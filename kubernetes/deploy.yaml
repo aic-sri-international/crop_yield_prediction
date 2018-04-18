@@ -1,0 +1,19 @@
+Name:           datalab-crop-yield
+Namespace:      world-builders
+Labels:         app=datalab-crop-yield
+                pod-template-hash=803629802
+Controlled By:  ReplicaSet/datalab-crop-yield-d47b6fd46
+Containers:
+  datalab:
+    Image:          worldmodelers.cse.sri.com/crop-yield:v1.2
+    Requests:
+      cpu:     20
+      memory:  1Gi
+    Mounts:
+      /content
+      /var/run/secrets/kubernetes.io/serviceaccount
+Volumes:
+  crop-yield-data:
+    Type:       PersistentVolumeClaim
+    ClaimName:  crop-yield-data-claim
+    ReadOnly:   false
