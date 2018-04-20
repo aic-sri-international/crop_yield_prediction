@@ -7,8 +7,7 @@ from GP_crop_v3 import *
 # Read CNN_err prediction
 CNN = {}
 GP = {}
-save_path = '/atlas/u/jiaxuan/data/train_results/final/monthly/'
-save_path = 'C:/360Downloads/final/monthly/'
+save_path = '/content/datalab/crop_yield_prediction/train_results/final/monthly/'
 path_current = save_path+str(0)+str(30)+str(2014)+'result_prediction.npz'
 data = np.load(path_current)
 
