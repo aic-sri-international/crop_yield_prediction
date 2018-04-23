@@ -95,6 +95,7 @@ if __name__ == "__main__":
                     sess.run(tf.initialize_all_variables())
                     saver=tf.train.Saver()
                     for i in range(config.train_step):
+                        # train the model
                         if i==4000:
                             config.lr/=10
 
@@ -173,6 +174,7 @@ if __name__ == "__main__":
                     logging.info('save in file: %s' % save_path)
 
                     # save result
+                    # TODO: determine if this is test code
                     pred_out = []
                     real_out = []
                     feature_out = []
