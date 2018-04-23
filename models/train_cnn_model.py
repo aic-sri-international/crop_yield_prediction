@@ -3,7 +3,15 @@ import tensorflow as tf
 import numpy as np
 import logging
 
+class CNNModelConfig():
+    B, W, H, C = 32, 32, 32, 9
+    train_step = 25000
+    lr = 1e-3
+    weight_decay = 0.005
 
+    keep_prob = 0.25
+    load_path = "/content/ee-data/img_full_output/"
+    save_path = '/content/datalab/crop_yield_prediction/train_results/final/yearly/'
 
 if __name__ == "__main__":
     config = CNNModelConfig()

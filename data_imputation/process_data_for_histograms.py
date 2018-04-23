@@ -261,38 +261,3 @@ def preprocess_save_data(file_tuple):
         del MODIS_raster_temp_arr
         del MODIS_raster_mask_arr
 
-
-if __name__ == "__main__":
-    # # save data
-    MODIS_dir = "/content/ira-gdrive/Data2/"
-    if (os.path.isdir(img_output_dir)):
-        shutil.rmtree(img_output_dir)
-    os.mkdir(img_output_dir)
-
-    if (os.path.isdir(img_zoom_output_dir)):
-        shutil.rmtree(img_zoom_output_dir)
-    os.mkdir(img_zoom_output_dir)
-
-    print("STARTING CLEAN...")
-    files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
-    files = [x for x in files if os.path.getsize(join(MODIS_dir, x)) < 157286400]
-
-    with Pool(20) as p:
-        try :
-            p.map(preprocess_save_data, enumerate(files))
-        except KeyboardInterrupt:
-            p.terminate()
-            p.join()
-
-    # for f in enumerate(files):
-    #     preprocess_save_data(file_tuple=f)
-    #    try:
-    #        p = Pool(60)
-    #        files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
-    #        print("Number of files: ", len(files))
-    #        p.map(preprocess_save_data, enumerate(files))
-    #    except KeyboardInterrupt:
-    #        p.terminate()
-    #        p.join()
-
-    print("DONE")

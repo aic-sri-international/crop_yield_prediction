@@ -26,7 +26,7 @@ Run this module:
 """
 
 
-class CropHistograms():
+class GenerateHists():
     """
     Read in numpy data and convert to histograms.
 
@@ -223,13 +223,3 @@ class CropHistograms():
         np.savez(self.dir + 'histogram_all_full.npz', output_image=output_image, output_yield=output_yield,
                  output_year=output_year, output_locations=output_locations, output_index=output_index)
         print('save done')
-
-
-if __name__ == '__main__':
-    output_dir = '/content/ee-data/img_full_output/'
-    data_yield_file = '/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final.csv'
-    data_yield_subset_file = '/content/datalab/notebooks/crop_yield_prediction/2 clean data/yield_final_subset.csv'
-    locations_file = '/content/datalab/notebooks/crop_yield_prediction/2 clean data/locations_final.csv'
-
-    data = CropHistograms(output_dir, data_yield_file, data_yield_subset_file, locations_file)
-    data.build_and_save_histogram()
