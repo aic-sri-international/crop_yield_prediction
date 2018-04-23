@@ -7,7 +7,7 @@ from os.path import isfile, join
 
 # from joblib import Parallel, delayed
 # import multiprocessing
-# from multiprocessing import Pool
+from multiprocessing import Pool
 
 """Data preprocessing pipeline
 
@@ -104,7 +104,7 @@ def merge_image(MODIS_img_list, MODIS_temperature_img_list):
         img_temperature_shape = MODIS_temperature_img_list[i].shape
         img_shape_new = (img_shape[0], img_shape[1], img_shape[2] + img_temperature_shape[2])
         merge = np.empty(img_shape_new)
-        for j in range(0, img_shape[2] / 7):
+        for j in range(0, int(img_shape[2] / 7)):
             img = MODIS_img_list[i][:, :, (j * 7):(j * 7 + 7)]
             temperature = MODIS_temperature_img_list[i][:, :, (j * 2):(j * 2 + 2)]
             merge[:, :, (j * 9):(j * 9 + 9)] = np.concatenate((img, temperature), axis=2)
@@ -130,7 +130,9 @@ def mask_image(MODIS_list, MODIS_mask_img_list):
     MODIS_list_masked = []
     for i in range(0, len(MODIS_list)):
         mask = np.tile(MODIS_mask_img_list[i], (1, 1, MODIS_list[i].shape[2]))
-        masked_img = MODIS_list[i] * mask
+        # print('Mask NaN Error: ' + np.isnan(mask).any())
+        # print('Image NaN Error: ' + np.isnan(MODIS_list[i]).any())
+        masked_img = np.nan_to_num(MODIS_list[i]) * np.nan_to_num(mask)
         MODIS_list_masked.append(masked_img)
     return MODIS_list_masked
 
@@ -151,7 +153,11 @@ def create_gdal_array(file_path):
     arr = raster.ReadAsArray()
     if not raster or not arr.size:
         print("ERROR GDAL raster failed! raster_array: {}, raster: {} Skipping file: {}".format(file_path, arr, raster))
+        raster = None
+        del raster
         return
+    raster = None
+    del raster
     return arr
 
 
@@ -175,19 +181,20 @@ def preprocess_save_data(file_tuple):
                                delimiter=',', dtype=float)
 
     index, tif_file = file_tuple
-    print("File: {}".format(tif_file))
+    print("File: {}, Index: {}, PID: {}".format(tif_file, index, os.getpid()))
 
-    # TODO: Need to figure out why these files are broken. Can they be fixed or filtered better?
-    broken_images = ['17_97.tif', '26_141.tif', '1_3.tif', '29_3.tif', '38_101.tif', '51_159.tif', '46_93.tif',
-                     '17_187.tif', '31_159.tif', '20_115.tif', '22_23.tif', '17_177.tif', '27_39.tif', '51_135.tif',
-                     '1_33.tif', '26_69.tif', '51_41.tif', '46_95.tfi', '27_77.tif', '31_87.tif', '27_35.tif',
-                     '45_3.tif', '27_143.tif', '22_19.tif', '13_37.tif', '13_119.tif', '13_43.tif', '17_139.tif',
-                     '29_157.tif', '18_17.tif', '20_207.tif', '21_69.tif', '26_9.tif']
-
+    # # TODO: Need to figure out why these files are broken. Can they be fixed or filtered better?
+    # broken_images = ['17_97.tif', '26_141.tif', '1_3.tif', '29_3.tif', '38_101.tif', '51_159.tif', '46_93.tif',
+    #                  '17_187.tif', '31_159.tif', '20_115.tif', '22_23.tif', '17_177.tif', '27_39.tif', '51_135.tif',
+    #                  '1_33.tif', '26_69.tif', '51_41.tif', '46_95.tfi', '27_77.tif', '31_87.tif', '27_35.tif',
+    #                  '45_3.tif', '27_143.tif', '22_19.tif', '13_37.tif', '13_119.tif', '13_43.tif', '17_139.tif',
+    #                  '29_157.tif', '18_17.tif', '20_207.tif', '21_69.tif', '26_9.tif']
+    # broken_images = ['22_23.tif', '26_69.tif', '27_71.tif', '46_23.tif', '1_3.tif', '26_141.tif', '46_93.tif']
+    
     if tif_file.endswith(".tif"):
-        if tif_file in broken_images:
-            print("skipping {} due to numpy multiple errors".format(tif_file))
-            return
+        # if tif_file in broken_images:
+        #     print("skipping {} due to numpy multiple errors".format(tif_file))
+        #     return
 
         MODIS_path = os.path.join(MODIS_dir, tif_file)
         MODIS_temperature_path = os.path.join(MODIS_temperature_dir, tif_file)
@@ -220,7 +227,7 @@ def preprocess_save_data(file_tuple):
             MODIS_mask_img[MODIS_mask_img != 12] = 0
             MODIS_mask_img[MODIS_mask_img == 12] = 1
         except ValueError as msg:
-            print(msg)
+            print("Exception: {}".format(msg))
             return
 
         # Extend mask img to accomidate new bands
@@ -268,8 +275,17 @@ if __name__ == "__main__":
 
     print("STARTING CLEAN...")
     files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
-    for f in enumerate(files):
-        preprocess_save_data(file_tuple=f)
+    files = [x for x in files if os.path.getsize(join(MODIS_dir, x)) < 104857600] 
+
+    with Pool(1) as p:
+        try:
+            p.map(preprocess_save_data, enumerate(files))
+        except KeyboardInterrupt:
+            p.terminate()
+            p.join()
+
+    # for f in enumerate(files):
+    #     preprocess_save_data(file_tuple=f)
     #    try:
     #        p = Pool(60)
     #        files = [f for f in listdir(MODIS_dir) if isfile(join(MODIS_dir, f))]
@@ -278,6 +294,6 @@ if __name__ == "__main__":
     #    except KeyboardInterrupt:
     #        p.terminate()
     #        p.join()
-    #    preprocess_save_data(img_output_dir, img_zoom_output_dir)
 
     print("DONE")
+
