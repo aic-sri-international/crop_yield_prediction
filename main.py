@@ -6,6 +6,8 @@ from os.path import isfile, join
 from multiprocessing import Pool
 from data_imputation.build_histograms import GenerateHists
 from data_imputation.process_data_for_histograms import preprocess_save_data
+from models.cnn import CNNModel
+from models.gp import GaussianProcess
 
 """
 Data source: download data from Google Earth Engine
@@ -55,6 +57,7 @@ if __name__ == '__main__':
         data = GenerateHists(output_dir, data_yield_file, data_yield_subset_file, locations_file)
         data.build_and_save_histogram()
     if args.train_model:
-        pass
+        model = CNNModel()
+        model.train()
     if args.test_model:
         pass

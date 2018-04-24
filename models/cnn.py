@@ -258,7 +258,7 @@ class CNNModel:
 
             # random choose validation set
             # TODO: This doesn't actually work. Selected years are not valid sets for training / validating each loop
-            # This appears to be a method for splitting training and validation for forecasting 
+            # This appears to be a method for splitting training and validation for forecasting
             index_train = np.nonzero(year_all < predict_year)[0]
             index_validate = np.nonzero(year_all == predict_year)[0]
             print 'train size', index_train.shape[0]
