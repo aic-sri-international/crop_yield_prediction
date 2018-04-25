@@ -3,7 +3,7 @@ import tensorflow as tf
 
 
 class CNNModel:
-    def __init__(self, num_weights=32, num_samples=30, num_bands=9,
+    def __init__(self, num_weights=32, num_samples=32, num_bands=9,
                  load_path="/content/ee-data/img_full_output/",
                  save_path='/content/datalab/crop_yield_prediction/train_results/final/yearly/'):
         """Creates a TensorFlow CNN model using batch normalization, Adam optimizer, L1 regularization, and L2 loss
@@ -198,7 +198,7 @@ class CNNModel:
             return tf.nn.batch_normalization(input_data, mean=mean, variance=variance, offset=None, scale=None,
                                              variance_epsilon=1e-6, name="batch")
 
-    def train(self, training_iterations=25000, learning_rate=1e-3, dropout_rate=0.25, num_bins=32):
+    def train(self, training_iterations=25000, learning_rate=1e-3, dropout_rate=0.25):
         """Train the model
 
         Returns
@@ -257,10 +257,10 @@ class CNNModel:
             # index_test = np.nonzero(year_all == predict_year+1)[0]
 
             # Choose training and validation years using a rolling window of size 2
-            index_train = np.nonzero((year_all < predict_year) and (year_all > predict_year - 3))[0]
+            index_train = np.nonzero((predict_year > year_all) & (year_all > (predict_year - 3)))[0]
             index_validate = np.nonzero(year_all == predict_year)[0]
-            print 'train size', index_train.shape[0]
-            print 'validate size', index_validate.shape[0]
+            print('train size', index_train.shape[0])
+            print('validate size', index_validate.shape[0])
 
             # # calc train image mean (for each band), and then detract (broadcast)
             # image_mean=np.mean(image_all[index_train],(0,1,2))
@@ -270,7 +270,7 @@ class CNNModel:
             yield_validate = yield_all[index_validate]
 
             # The guessed max RMSE (to be minimized over time)
-            RMSE_min = 100
+            RMSE_min = 1000
 
             # Setup TF properties and saver
             gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.22)
@@ -282,8 +282,8 @@ class CNNModel:
             for i in range(training_iterations):
 
                 # Divide into bins and shuffle data
-                index_train_batch = np.random.choice(index_train, size=num_bins)
-                index_validate_batch = np.random.choice(index_validate, size=num_bins)
+                index_train_batch = np.random.choice(index_train, size=self.num_samples)
+                index_validate_batch = np.random.choice(index_validate, size=self.num_samples)
 
                 # Select divided data
                 image_train_batch = image_all[index_train_batch]
@@ -308,19 +308,22 @@ class CNNModel:
                                                           self.y: yield_all[index_validate_batch],
                                                           self.keep_prob: 1
                                                       })
-                    print str(self.num_samples) + 'predict year' + str(predict_year) + 'step' + \
-                          str(i), train_loss, train_loss_reg, val_loss, val_loss_reg, learning_rate
+
+                    # TODO: Needs to be fixed badly
+                    print(str(self.num_samples) + 'predict year' + str(predict_year) + 'step' + \
+                          str(i), train_loss, train_loss_reg, val_loss, val_loss_reg, learning_rate)
 
                     # Predicted validation values
                     pred = []
                     real = []
-                    for j in range(image_validate.shape[0] / num_bins):
-                        real_temp = yield_validate[j * num_bins:(j + 1) * num_bins]
+                    for j in range(image_validate.shape[0] / self.num_samples):
+                        real_temp = yield_validate[j * self.num_samples:(j + 1) * self.num_samples]
                         pred_temp = sess.run(self.logits,
                                              feed_dict={
-                                                 self.x: image_validate[j * num_bins:(j + 1) * num_bins, :,
-                                                         0:self.num_samples, :],
-                                                 self.y: yield_validate[j * num_bins:(j + 1) * num_bins],
+                                                 self.x: image_validate[j * self.num_samples:(j + 1) * self.num_samples,
+                                                         :, 0:self.num_samples, :],
+                                                 self.y: yield_validate[
+                                                         j * self.num_samples:(j + 1) * self.num_samples],
                                                  self.keep_prob: 1
                                              })
                         pred.append(pred_temp)
@@ -337,7 +340,7 @@ class CNNModel:
                     if RMSE < RMSE_min:
                         RMSE_min = RMSE
 
-                    print 'Validation set:', 'RMSE:', RMSE, 'ME:', ME, 'RMSE_min:', RMSE_min
+                    print('Validation set:', 'RMSE:', RMSE, 'ME:', ME, 'RMSE_min:', RMSE_min)
 
                     summary_train_loss.append(train_loss)
                     summary_eval_loss.append(val_loss)
@@ -356,27 +359,27 @@ class CNNModel:
             year_out = []
             locations_out = []
             index_out = []
-            for i in range(image_all.shape[0] / num_bins):
+            for i in range(int(image_all.shape[0] / self.num_samples)):
                 feature, pred = sess.run(
                     [self.fc7, self.logits], feed_dict={
-                        self.x: image_all[i * num_bins:(i + 1) * num_bins, :, 0:self.num_samples, :],
-                        self.y: yield_all[i * num_bins:(i + 1) * num_bins],
+                        self.x: image_all[i * self.num_samples:(i + 1) * self.num_samples, :, 0:self.num_samples, :],
+                        self.y: yield_all[i * self.num_samples:(i + 1) * self.num_samples],
                         self.keep_prob: 1
                     })
-                real = yield_all[i * num_bins:(i + 1) * num_bins]
+                real = yield_all[i * self.num_samples:(i + 1) * self.num_samples]
 
                 pred_out.append(pred)
                 real_out.append(real)
                 feature_out.append(feature)
-                year_out.append(year_all[i * num_bins:(i + 1) * num_bins])
-                locations_out.append(locations_all[i * num_bins:(i + 1) * num_bins])
-                index_out.append(index_all[i * num_bins:(i + 1) * num_bins])
-                # print i
+                year_out.append(year_all[i * self.num_samples:(i + 1) * self.num_samples])
+                locations_out.append(locations_all[i * self.num_samples:(i + 1) * self.num_samples])
+                index_out.append(index_all[i * self.num_samples:(i + 1) * self.num_samples])
+                # print(i)
 
             weight_out, b_out = sess.run(
                 [self.dense_W, self.dense_B], feed_dict={
-                    self.x: image_all[0 * num_bins:(0 + 1) * num_bins, :, 0:self.num_samples, :],
-                    self.y: yield_all[0 * num_bins:(0 + 1) * num_bins],
+                    self.x: image_all[0 * self.num_samples:(0 + 1) * self.num_samples, :, 0:self.num_samples, :],
+                    self.y: yield_all[0 * self.num_samples:(0 + 1) * self.num_samples],
                     self.keep_prob: 1
                 })
             pred_out = np.concatenate(pred_out)
