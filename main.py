@@ -7,7 +7,7 @@ from multiprocessing import Pool
 from data_imputation.build_histograms import GenerateHists
 from data_imputation.process_data_for_histograms import preprocess_save_data
 from models.cnn import CNNModel
-from models.gp import GaussianProcess
+import tensorflow as tf
 
 """
 Data source: download data from Google Earth Engine
@@ -24,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('-b', action='store_true', default=False, dest='build_hists', help='build histograms')
     parser.add_argument('-m', action='store_true', default=False, dest='train_model', help='train the model')
     parser.add_argument('-r', action='store_true', default=False, dest='test_model', help='test the model')
+    parser.add_argument('-q', action='store_true', default=False, dest='query_model', help='query the model for a specific sample')
 
     args = parser.parse_args()
     output_dir = '/content/ee-data/img_full_output/'
@@ -57,7 +58,12 @@ if __name__ == '__main__':
         data = GenerateHists(output_dir, data_yield_file, data_yield_subset_file, locations_file)
         data.build_and_save_histogram()
     if args.train_model:
-        model = CNNModel()
-        model.train()
+        # must build tensorflow graph prior to initializing the model
+        g = tf.Graph()
+        with g.as_default():
+            model = CNNModel()
+            model.train()
     if args.test_model:
+        pass
+    if args.query_model:
         pass

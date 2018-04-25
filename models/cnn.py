@@ -3,7 +3,7 @@ import tensorflow as tf
 
 
 class CNNModel:
-    def __init__(self, num_weights=32, num_samples=32, num_bands=9,
+    def __init__(self, num_weights=32, num_samples=30, num_bands=9,
                  load_path="/content/ee-data/img_full_output/",
                  save_path='/content/datalab/crop_yield_prediction/train_results/final/yearly/'):
         """Creates a TensorFlow CNN model using batch normalization, Adam optimizer, L1 regularization, and L2 loss
@@ -88,8 +88,8 @@ class CNNModel:
         # loss
         self.loss = self.loss_err + self.loss_reg * alpha
 
-        # training optimizer
-        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
+        # training optimizer (epsilon default 1e-8)
+        self.train_op = tf.train.AdamOptimizer(learning_rate=self.lr, epsilon=1e-4).minimize(self.loss)
 
     def conv2d(self, input_data, out_channels, filter_size, stride, in_channels=None, name="conv2d"):
         """Perform a 2D convolution on the input_data and return the resulting tensor
@@ -256,10 +256,8 @@ class CNNModel:
             # index_validate = np.nonzero(year_all == predict_year)[0]
             # index_test = np.nonzero(year_all == predict_year+1)[0]
 
-            # random choose validation set
-            # TODO: This doesn't actually work. Selected years are not valid sets for training / validating each loop
-            # This appears to be a method for splitting training and validation for forecasting
-            index_train = np.nonzero(year_all < predict_year)[0]
+            # Choose training and validation years using a rolling window of size 2
+            index_train = np.nonzero((year_all < predict_year) and (year_all > predict_year - 3))[0]
             index_validate = np.nonzero(year_all == predict_year)[0]
             print 'train size', index_train.shape[0]
             print 'validate size', index_validate.shape[0]
@@ -271,143 +269,130 @@ class CNNModel:
             image_validate = image_all[index_validate]
             yield_validate = yield_all[index_validate]
 
-            for time in range(10, 31, 4):
-                RMSE_min = 100
-                g = tf.Graph()
-                with g.as_default():
-                    # modify config
-                    num_samples = time
+            # The guessed max RMSE (to be minimized over time)
+            RMSE_min = 100
 
-                    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.22)
-                    # Launch the graph.
-                    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
-                    sess.run(tf.initialize_all_variables())
-                    saver = tf.train.Saver()
-                    for i in range(training_iterations):
-                        # train the model
-                        if i == 4000:
-                            learning_rate /= 10
+            # Setup TF properties and saver
+            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.22)
+            saver = tf.train.Saver()
+            sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+            sess.run(tf.global_variables_initializer())
 
-                        if i == 20000:
-                            learning_rate /= 10
+            # Training
+            for i in range(training_iterations):
 
-                        # index_train_batch = np.random.choice(index_train,size=num_bins)
-                        index_validate_batch = np.random.choice(index_validate, size=num_bins)
+                # Divide into bins and shuffle data
+                index_train_batch = np.random.choice(index_train, size=num_bins)
+                index_validate_batch = np.random.choice(index_validate, size=num_bins)
 
-                        # try data augmentation while training
-                        shift = 1
-                        index_train_batch_1 = np.random.choice(index_train, size=num_bins + shift * 2)
-                        index_train_batch_2 = np.random.choice(index_train, size=num_bins + shift * 2)
-                        image_train_batch = (image_all[index_train_batch_1, :, 0:num_samples, :] + image_all[
-                                                                                                   index_train_batch_1, :,
-                                                                                                   0:num_samples, :]) / 2
-                        yield_train_batch = (yield_all[index_train_batch_1] + yield_all[index_train_batch_1]) / 2
+                # Select divided data
+                image_train_batch = image_all[index_train_batch]
+                yield_train_batch = yield_all[index_train_batch]
 
-                        arg_index = np.argsort(yield_train_batch)
-                        yield_train_batch = yield_train_batch[arg_index][shift:-shift]
-                        image_train_batch = image_train_batch[arg_index][shift:-shift]
+                # Train the model and get the loss and loss regularization. Ignore returned values
+                _, train_loss, train_loss_reg = sess.run([self.train_op, self.loss_err, self.loss_reg],
+                                                         feed_dict={
+                                                             self.x: image_train_batch,
+                                                             self.y: yield_train_batch,
+                                                             self.lr: learning_rate,
+                                                             self.keep_prob: dropout_rate
+                                                         })
 
-                        _, train_loss, train_loss_reg = sess.run([self.train_op, self.loss_err, self.loss_reg],
-                                                                 feed_dict={
-                                                                     self.x: image_train_batch,
-                                                                     self.y: yield_train_batch,
-                                                                     self.lr: learning_rate,
-                                                                     self.keep_prob: dropout_rate
-                                                                 })
+                # Validate 100 times over the course of training
+                if i % (training_iterations / 100) == 0:
+                    # Validation Loss
+                    val_loss, val_loss_reg = sess.run([self.loss_err, self.loss_reg],
+                                                      feed_dict={
+                                                          self.x: image_all[index_validate_batch, :, 0:self.num_samples,
+                                                                  :],
+                                                          self.y: yield_all[index_validate_batch],
+                                                          self.keep_prob: 1
+                                                      })
+                    print str(self.num_samples) + 'predict year' + str(predict_year) + 'step' + \
+                          str(i), train_loss, train_loss_reg, val_loss, val_loss_reg, learning_rate
 
-                        if i % 500 == 0:
-                            val_loss, val_loss_reg = sess.run([self.loss_err, self.loss_reg], feed_dict={
-                                self.x: image_all[index_validate_batch, :, 0:num_samples, :],
-                                self.y: yield_all[index_validate_batch],
-                                self.keep_prob: 1
-                            })
+                    # Predicted validation values
+                    pred = []
+                    real = []
+                    for j in range(image_validate.shape[0] / num_bins):
+                        real_temp = yield_validate[j * num_bins:(j + 1) * num_bins]
+                        pred_temp = sess.run(self.logits,
+                                             feed_dict={
+                                                 self.x: image_validate[j * num_bins:(j + 1) * num_bins, :,
+                                                         0:self.num_samples, :],
+                                                 self.y: yield_validate[j * num_bins:(j + 1) * num_bins],
+                                                 self.keep_prob: 1
+                                             })
+                        pred.append(pred_temp)
+                        real.append(real_temp)
 
-                            print str(time) + 'predict year' + str(predict_year) + 'step' + str(
-                                i), train_loss, train_loss_reg, val_loss, val_loss_reg, learning_rate
+                    # Dimensionality reduction
+                    pred = np.concatenate(pred)
+                    real = np.concatenate(real)
 
-                        if i % 500 == 0:
-                            # do validation
-                            pred = []
-                            real = []
-                            for j in range(image_validate.shape[0] / num_bins):
-                                real_temp = yield_validate[j * num_bins:(j + 1) * num_bins]
-                                pred_temp = sess.run(self.logits, feed_dict={
-                                    self.x: image_validate[j * num_bins:(j + 1) * num_bins, :, 0:num_samples, :],
-                                    self.y: yield_validate[j * num_bins:(j + 1) * num_bins],
-                                    self.keep_prob: 1
-                                })
-                                pred.append(pred_temp)
-                                real.append(real_temp)
-                            pred = np.concatenate(pred)
-                            real = np.concatenate(real)
-                            RMSE = np.sqrt(np.mean((pred - real) ** 2))
-                            ME = np.mean(pred - real)
-                            RMSE_ideal = np.sqrt(np.mean((pred - ME - real) ** 2))
-                            arg_index = np.argsort(pred)
-                            pred = pred[arg_index][50:-50]
-                            real = real[arg_index][50:-50]
-                            ME_part = np.mean(pred - real)
+                    # Evaluation of validation set
+                    RMSE = np.sqrt(np.mean((pred - real) ** 2))
+                    ME = np.mean(pred - real)
 
-                            if RMSE < RMSE_min:
-                                RMSE_min = RMSE
+                    if RMSE < RMSE_min:
+                        RMSE_min = RMSE
 
-                            # print 'Validation set','RMSE',RMSE,'ME',ME,'RMSE_min',RMSE_min
+                    print 'Validation set:', 'RMSE:', RMSE, 'ME:', ME, 'RMSE_min:', RMSE_min
 
-                            print 'Validation set', 'RMSE', RMSE, 'RMSE_ideal', RMSE_ideal, 'ME', ME, 'ME_part', ME_part, 'RMSE_min', RMSE_min
+                    summary_train_loss.append(train_loss)
+                    summary_eval_loss.append(val_loss)
+                    summary_RMSE.append(RMSE)
+                    summary_ME.append(ME)
 
-                            summary_train_loss.append(train_loss)
-                            summary_eval_loss.append(val_loss)
-                            summary_RMSE.append(RMSE)
-                            summary_ME.append(ME)
-                    # save
-                    CNNModel.save_path = saver.save(sess, CNNModel.save_path + str(time) + str(
-                        predict_year) + 'CNNModel.ckpt')
-                    print('save in file: %s' % CNNModel.save_path)
+            # Define save path
+            save_path = saver.save(sess, self.save_path + str(self.num_samples) + str(predict_year) + 'CNNModel.ckpt')
+            print('save in file: %s' % save_path)
 
-                    # save result
-                    # TODO: determine if this is test code
-                    pred_out = []
-                    real_out = []
-                    feature_out = []
-                    year_out = []
-                    locations_out = []
-                    index_out = []
-                    for i in range(image_all.shape[0] / num_bins):
-                        feature, pred = sess.run(
-                            [self.fc6, self.logits], feed_dict={
-                                self.x: image_all[i * num_bins:(i + 1) * num_bins, :, 0:num_samples, :],
-                                self.y: yield_all[i * num_bins:(i + 1) * num_bins],
-                                self.keep_prob: 1
-                            })
-                        real = yield_all[i * num_bins:(i + 1) * num_bins]
+            # save result
+            # TODO: determine if this is test code
+            pred_out = []
+            real_out = []
+            feature_out = []
+            year_out = []
+            locations_out = []
+            index_out = []
+            for i in range(image_all.shape[0] / num_bins):
+                feature, pred = sess.run(
+                    [self.fc7, self.logits], feed_dict={
+                        self.x: image_all[i * num_bins:(i + 1) * num_bins, :, 0:self.num_samples, :],
+                        self.y: yield_all[i * num_bins:(i + 1) * num_bins],
+                        self.keep_prob: 1
+                    })
+                real = yield_all[i * num_bins:(i + 1) * num_bins]
 
-                        pred_out.append(pred)
-                        real_out.append(real)
-                        feature_out.append(feature)
-                        year_out.append(year_all[i * num_bins:(i + 1) * num_bins])
-                        locations_out.append(locations_all[i * num_bins:(i + 1) * num_bins])
-                        index_out.append(index_all[i * num_bins:(i + 1) * num_bins])
-                        # print i
-                    weight_out, b_out = sess.run(
-                        [self.dense_W, self.dense_B], feed_dict={
-                            self.x: image_all[0 * num_bins:(0 + 1) * num_bins, :, 0:num_samples, :],
-                            self.y: yield_all[0 * num_bins:(0 + 1) * num_bins],
-                            self.keep_prob: 1
-                        })
-                    pred_out = np.concatenate(pred_out)
-                    real_out = np.concatenate(real_out)
-                    feature_out = np.concatenate(feature_out)
-                    year_out = np.concatenate(year_out)
-                    locations_out = np.concatenate(locations_out)
-                    index_out = np.concatenate(index_out)
+                pred_out.append(pred)
+                real_out.append(real)
+                feature_out.append(feature)
+                year_out.append(year_all[i * num_bins:(i + 1) * num_bins])
+                locations_out.append(locations_all[i * num_bins:(i + 1) * num_bins])
+                index_out.append(index_all[i * num_bins:(i + 1) * num_bins])
+                # print i
 
-                    np.savez(CNNModel.save_path + str(time) + str(predict_year) + 'result_prediction.npz',
-                             pred_out=pred_out, real_out=real_out, feature_out=feature_out,
-                             year_out=year_out, locations_out=locations_out, weight_out=weight_out, b_out=b_out,
-                             index_out=index_out)
-                    np.savez(CNNModel.save_path + str(time) + str(predict_year) + 'result.npz',
-                             summary_train_loss=summary_train_loss, summary_eval_loss=summary_eval_loss,
-                             summary_RMSE=summary_RMSE, summary_ME=summary_RMSE)
+            weight_out, b_out = sess.run(
+                [self.dense_W, self.dense_B], feed_dict={
+                    self.x: image_all[0 * num_bins:(0 + 1) * num_bins, :, 0:self.num_samples, :],
+                    self.y: yield_all[0 * num_bins:(0 + 1) * num_bins],
+                    self.keep_prob: 1
+                })
+            pred_out = np.concatenate(pred_out)
+            real_out = np.concatenate(real_out)
+            feature_out = np.concatenate(feature_out)
+            year_out = np.concatenate(year_out)
+            locations_out = np.concatenate(locations_out)
+            index_out = np.concatenate(index_out)
+
+            np.savez(self.save_path + str(self.num_samples) + str(predict_year) + 'result_prediction.npz',
+                     pred_out=pred_out, real_out=real_out, feature_out=feature_out,
+                     year_out=year_out, locations_out=locations_out, weight_out=weight_out, b_out=b_out,
+                     index_out=index_out)
+            np.savez(self.save_path + str(self.num_samples) + str(predict_year) + 'result.npz',
+                     summary_train_loss=summary_train_loss, summary_eval_loss=summary_eval_loss,
+                     summary_RMSE=summary_RMSE, summary_ME=summary_RMSE)
 
 
 def test(self):
